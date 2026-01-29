@@ -68,8 +68,13 @@ cmake-build/
 
 # environment
 .venv
+.direnv/
+.zig-cache/
 .DS_Store
 *.dSYM/
+
+# local tools
+/tools/nrandom
 
 # corpus download
 /_corpus/

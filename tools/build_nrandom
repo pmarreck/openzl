@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+zig build-exe tools/nrandom.zig -O ReleaseFast -fstrip -femit-bin=tools/nrandom

@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+output=""
+count_bytes="${OPENZL_BENCH_BYTES:-52428800}"
+min_val="${OPENZL_BENCH_MIN:-0}"
+max_val="${OPENZL_BENCH_MAX:-63}"
+seed="${OPENZL_BENCH_SEED:-12345}"
+force=0
+verify=1
+
+usage() {
+  cat <<'USAGE'
+Usage: gen_bench_data --output FILE [options]
+
+Options:
+  --output FILE    Output file path (required)
+  --bytes N        Number of bytes to generate (default: 52428800)
+  --min N          Minimum byte value (default: 0)
+  --max N          Maximum byte value (default: 63)
+  --seed N         Deterministic seed (default: 12345)
+  --force          Regenerate even if file exists and checksum matches
+  --no-verify      Skip checksum verification when file exists
+  -h, --help       Show this help
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output) output="${2:-}"; shift 2;;
+    --bytes) count_bytes="${2:-}"; shift 2;;
+    --min) min_val="${2:-}"; shift 2;;
+    --max) max_val="${2:-}"; shift 2;;
+    --seed) seed="${2:-}"; shift 2;;
+    --force) force=1; shift;;
+    --no-verify) verify=0; shift;;
+    -h|--help) usage; exit 0;;
+    *) echo "Unknown option: $1" >&2; usage; exit 1;;
+  esac
+done
+
+if [ -z "$output" ]; then
+  echo "Missing --output" >&2
+  usage
+  exit 1
+fi
+
+mkdir -p "$(dirname "$output")"
+
+sha_cmd() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    echo "No sha256 tool (shasum/sha256sum) found" >&2
+    return 1
+  fi
+}
+
+if [ ! -x "./tools/nrandom" ]; then
+  echo "tools/nrandom not found; building it..." >&2
+  ./tools/build_nrandom
+fi
+
+meta_file="${output}.meta"
+sha_file="${output}.sha256"
+nrandom_sha="$(sha_cmd ./tools/nrandom.zig)"
+
+meta_matches() {
+  [ -f "$meta_file" ] || return 1
+  grep -q "^seed=$seed$" "$meta_file" || return 1
+  grep -q "^bytes=$count_bytes$" "$meta_file" || return 1
+  grep -q "^min=$min_val$" "$meta_file" || return 1
+  grep -q "^max=$max_val$" "$meta_file" || return 1
+  grep -q "^nrandom_sha=$nrandom_sha$" "$meta_file" || return 1
+}
+
+sha_matches() {
+  [ -f "$sha_file" ] || return 1
+  local expected actual
+  expected="$(awk '{print $1}' "$sha_file" | head -n 1)"
+  actual="$(sha_cmd "$output")"
+  [ "$expected" = "$actual" ]
+}
+
+if [ -f "$output" ] && [ $force -eq 0 ]; then
+  if [ $verify -eq 1 ]; then
+    if meta_matches && sha_matches; then
+      exit 0
+    fi
+    echo "Benchmark data exists but checksum/meta mismatch; regenerating..." >&2
+  else
+    exit 0
+  fi
+fi
+
+echo "Generating benchmark data: $output ($count_bytes bytes, range $min_val..$max_val, seed $seed)" >&2
+tmp="${output}.tmp"
+./tools/nrandom -s "$seed" -b -c "$count_bytes" "$min_val" "$max_val" > "$tmp"
+mv "$tmp" "$output"
+
+sha="$(sha_cmd "$output")"
+printf '%s  %s\n' "$sha" "$(basename "$output")" > "$sha_file"
+cat > "$meta_file" <<META
+seed=$seed
+bytes=$count_bytes
+min=$min_val
+max=$max_val
+nrandom_sha=$nrandom_sha
+META

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$root"
+
+# Build local tools
+./tools/build_nrandom
+
+# Ensure zig uses a writable cache and avoid flags zig doesn't recognize.
+export ZIG_GLOBAL_CACHE_DIR="$root/.zig-cache"
+export ZIG_LOCAL_CACHE_DIR="$root/.zig-cache"
+if [ -n "${NIX_CFLAGS_COMPILE:-}" ]; then
+  export NIX_CFLAGS_COMPILE="$(echo "$NIX_CFLAGS_COMPILE" | sed -E 's/-fmacro-prefix-map=[^ ]+//g' | xargs)"
+fi
+
+echo "== make (BUILD_TYPE=OPT) =="
+make clean
+make BUILD_TYPE=OPT -j
+
+echo "== cmake (clang, Release) =="
+cmake -S . -B build -DOPENZL_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+
+echo "== cmake (zig, Release) =="
+cmake -S . -B build-zig2 \
+  -DOPENZL_BUILD_TESTS=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=zig -DCMAKE_C_COMPILER_ARG1=cc \
+  -DCMAKE_CXX_COMPILER=zig -DCMAKE_CXX_COMPILER_ARG1=c++
+cmake --build build-zig2 -j
