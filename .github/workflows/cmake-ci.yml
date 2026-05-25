@@ -51,7 +51,7 @@ jobs:
             no_introspection: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure CMake
         run: |
@@ -111,7 +111,7 @@ jobs:
     name: CMake Install Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Test CMake installation
         run: ./build-scripts/cmake/tests/test-install.py
 
@@ -120,7 +120,7 @@ jobs:
     name: CMake Tarball Build Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Test tarball build scenario
         run: |
           # Simulate tarball environment by removing git repo and deps
